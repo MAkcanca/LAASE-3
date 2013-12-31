@@ -1,0 +1,34 @@
+bash skripts palaiž `python ./payload.py` ciklā
+
+piestartējas
+  pārbauda visu, 
+  izveido mapes
+  ielasa config failus
+  ielasa sekvences failus
+
+date_set = false
+
+funkcija, kas pollo GPS, saņem datumu, uzseto to
+  tiek izsaukta ciklā, ja nav date_set
+  
+sāk ciklu
+  uzņem foto
+  saglabā
+  izveido ssdv failu
+  nosūta bildi
+    sūtīšanas laikā
+      saņem jaunus GPS datus
+      izveido telemetrijas teikumu
+      nosūta to ik pēc 256 baitiem
+      uzņem jaunu bildi, ja pagājis pietiekami daudz laika
+
+todo
+  EXIF
+  saglabāt json'ā uzreiz
+  ziņojumi dažādos augstumos
+  //uzraksts SSDV attēliem - augstums, ..
+  attēli
+    pārbauda diska vietu pirms attēlu uzņemšanas
+    ssdv izvēlēties lielāko attēlu, kopš iepriekšējā attēla (interesantāks)
+    video - 10-15 sekundes
+  temperatūra - ārējā, GPU
