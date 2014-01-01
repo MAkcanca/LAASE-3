@@ -7,15 +7,13 @@ import serial
 import os
 import time
 from time import gmtime, strftime
+import subprocess
 import demjson as json
 import crcmod
 
 gps_time_set = False
 
-callsign = "RASA"
-
-# GPS = serial.Serial("/dev/ttyAMA0", 9600, timeout=1)
-
+RADIO_CALLSIGN = "RASA"
 RADIO_BAUDRATE = 300
 
 # ----------------------------------------------------------------------------
@@ -157,6 +155,8 @@ def gps_poll(sentence_type="00*33"):
     
   else:
     mylog("no line")
+    # no values
+    return gps_data
 
 
 # http://us.cactii.net/~bb/gps.py
@@ -187,6 +187,31 @@ def gps_sendUBX(MSG, length):
   time.sleep(0.2)
   GPS.close()
 
+
+def get_temperatures():
+  result = {
+    "cpu_temp": 0,
+    "gpu_temp": 0,
+  }
+  
+  try:
+    p = subprocess.Popen('cat /sys/class/thermal/thermal_zone0/temp', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in p.stdout.readlines():
+      cpu_temp = round(float(float(line)/10 % float(line)/100), 1)
+      result["cpu_temp"] = cpu_temp
+    retval = p.wait()
+    
+    p = subprocess.Popen('/opt/vc/bin/vcgencmd measure_temp', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in p.stdout.readlines():
+      tmp = line.split("=")
+      tmp = tmp[1].split("'")
+      gpu_temp = float(tmp[0])
+      result["gpu_temp"] = gpu_temp
+    retval = p.wait()
+  except:
+    print "fail"
+  
+  return result
 
 
 # ----------------------------------------------------------------------------
@@ -251,7 +276,7 @@ while True:
       os.system(cmd)
       image_filename += "-osd"
     
-    os.system("/home/pi/sw/ssdv/ssdv -e -c " + callsign + " -i " + str(image_ssdv_seq) + " ./ssdvpics/" + image_filename + ".jpg ./current.ssdv > /dev/null 2>&1")
+    os.system("/home/pi/sw/ssdv/ssdv -e -c " + RADIO_CALLSIGN + " -i " + str(image_ssdv_seq) + " ./ssdvpics/" + image_filename + ".jpg ./current.ssdv > /dev/null 2>&1")
     mylog("encoded SSDV picture")
   
 
@@ -267,12 +292,12 @@ while True:
 
       if i % 5 == 0:
         mylog("taking picture #" + str(image_seq) + "..")
-        os.system("/usr/bin/raspistill -n -w 2592 -h 1944 -t 1000 -e jpg -q 90 -ex auto -mm matrix -o ./pics/" + strftime("%Y%m%d-%H%M%S", gmtime()) + "_" + str(image_seq) + ".jpg &")
+        # os.system("/usr/bin/raspistill -n -w 2592 -h 1944 -t 1000 -e jpg -q 90 -ex auto -mm matrix -o ./pics/" + strftime("%Y%m%d-%H%M%S", gmtime()) + "_" + str(image_seq) + ".jpg &")
         mylog("  ..done")
         image_seq += 1
       
       # telemetrija
-      datastring = callsign + ","
+      datastring = RADIO_CALLSIGN + ","
       datastring += str(sentence_id) + ","
       datastring += str(gps_data["time"]) + ","
       datastring += str(gps_data["latitude"]) + ","
@@ -280,7 +305,12 @@ while True:
       datastring += str(gps_data["altitude"]) + ","
       datastring += str(gps_data["speed"]) + ","
       datastring += str(gps_data["vspeed"]) + ","
-      datastring += str(gps_data["satellites"])
+      datastring += str(gps_data["satellites"]) + ","
+      
+      temps =  get_temperatures()
+      datastring += str(temps["cpu_temp"]) + ","
+      datastring += str(temps["gpu_temp"])
+      
       datastring += "*" + str(hex(crc16f(datastring))).upper()[2:]
       datastring = "$$" + datastring
       mylog(datastring)

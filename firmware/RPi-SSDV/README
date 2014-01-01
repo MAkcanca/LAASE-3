@@ -1,0 +1,8 @@
+Requirements
+
+Python modules
+  demjson
+  pyserial
+  crcmod
+
+SSDV - https://github.com/fsphil/ssdv
