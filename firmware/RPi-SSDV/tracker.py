@@ -11,10 +11,13 @@ import subprocess
 import demjson as json
 import crcmod
 
-gps_time_set = False
 
 RADIO_CALLSIGN = "RASA"
 RADIO_BAUDRATE = 300
+
+DS18B20_SENSOR_ID = "28-000003bb2414"
+
+gps_time_set = False
 
 # ----------------------------------------------------------------------------
 
@@ -192,6 +195,7 @@ def get_temperatures():
   result = {
     "cpu_temp": 0,
     "gpu_temp": 0,
+    "external_temp": 0,
   }
   
   try:
@@ -208,11 +212,33 @@ def get_temperatures():
       gpu_temp = float(tmp[0])
       result["gpu_temp"] = gpu_temp
     retval = p.wait()
+    
+    result["external_temp"] = ds18b20_read_temp()
   except:
     print "fail"
   
   return result
 
+
+
+def ds18b20_read_temp_raw():
+  device_file = '/sys/bus/w1/devices/' + DS18B20_SENSOR_ID + '/w1_slave'
+  catdata = subprocess.Popen(['cat',device_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  out,err = catdata.communicate()
+  out_decode = out.decode('utf-8')
+  lines = out_decode.split('\n')
+  return lines
+
+def ds18b20_read_temp():
+  lines = ds18b20_read_temp_raw()
+  while lines[0].strip()[-3:] != 'YES':
+    time.sleep(0.2)
+    lines = ds18b20_read_temp_raw()
+  equals_pos = lines[1].find('t=')
+  if equals_pos != -1:
+    temp_string = lines[1][equals_pos+2:]
+    temp_c = float(temp_string) / 1000.0
+    return temp_c
 
 # ----------------------------------------------------------------------------
 
@@ -237,6 +263,10 @@ image_ssdv_seq = counters["image-ssdv"]
 # mylog("setting up GPS..")
 # gps_setup()
 # mylog("  ..done")
+
+# DS18B20 sensor
+os.system('modprobe w1-gpio')
+os.system('modprobe w1-therm')
 
 
 while True:
@@ -309,7 +339,8 @@ while True:
       
       temps =  get_temperatures()
       datastring += str(temps["cpu_temp"]) + ","
-      datastring += str(temps["gpu_temp"])
+      datastring += str(temps["gpu_temp"]) + ","
+      datastring += str(temps["external_temp"])
       
       datastring += "*" + str(hex(crc16f(datastring))).upper()[2:]
       datastring = "$$" + datastring
