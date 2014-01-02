@@ -290,6 +290,29 @@ def dump_current_position(gps_data):
   open("./gps-data.txt", 'w').write(current_position)
 
 
+def get_temeletry_string(gps_data):
+  global sentence_id, RADIO_CALLSIGN
+
+  datastring = RADIO_CALLSIGN + ","
+  datastring += str(sentence_id) + ","
+  datastring += str(gps_data["time"]) + ","
+  datastring += str(gps_data["latitude"]) + ","
+  datastring += str(gps_data["longitude"]) + ","
+  datastring += str(gps_data["altitude"]) + ","
+  datastring += str(gps_data["speed"]) + ","
+  datastring += str(gps_data["vspeed"]) + ","
+  datastring += str(gps_data["satellites"]) + ","
+
+  temps =  get_temperatures()
+  datastring += str(temps["cpu_temp"]) + ","
+  datastring += str(temps["gpu_temp"]) + ","
+  datastring += str(temps["external_temp"])
+
+  datastring += "*" + str(hex(crc16f(datastring))).upper()[2:].zfill(4)
+  datastring = "$$" + datastring
+  return datastring
+
+
 # ----------------------------------------------------------------------------
 
 # counters = {}
@@ -338,6 +361,14 @@ while True:
         gps_time_set = True
 
 
+    # telemetry
+    datastring = get_temeletry_string(gps_data)
+    mylog(datastring)
+    telemetry = bytearray.fromhex("00 00 00") + "\n\n$" + datastring + "\n\n"
+    radio_send(telemetry)
+    sentence_id += 1
+
+
     # find biggest image since the transmission of the previous one
     # encode and start transmitting
     
@@ -361,62 +392,38 @@ while True:
     
       cmd = "/home/pi/sw/ssdv/ssdv -e -c " + RADIO_CALLSIGN + " -i " + str(ssdv_image_seq) + " ./ssdvpics/" + image_filename + " ./current.ssdv > /dev/null 2>&1"
       os.system(cmd)
-      mylog(cmd)
+      # mylog(cmd)
       mylog("encoded SSDV picture")
     
       ssdv_lastTXtime = time.time()
   
 
-    f = open("./current.ssdv", "rb"); 
-    packet = f.read(256); 
-    i = 0
-    while packet != "":
+      f = open("./current.ssdv", "rb"); 
+      packet = f.read(256); 
+      i = 0
+      while packet != "":
 
-      # mylog("polling GPS..")
-      gps_data = gps_poll()
-      # mylog("  ..done")
-      # mylog(gps_data)
+        gps_data = gps_poll()
       
-      # for images
-      dump_current_position(gps_data)    
-
+        # for images
+        dump_current_position(gps_data)    
       
-      # telemetrija
-      datastring = RADIO_CALLSIGN + ","
-      datastring += str(sentence_id) + ","
-      datastring += str(gps_data["time"]) + ","
-      datastring += str(gps_data["latitude"]) + ","
-      datastring += str(gps_data["longitude"]) + ","
-      datastring += str(gps_data["altitude"]) + ","
-      datastring += str(gps_data["speed"]) + ","
-      datastring += str(gps_data["vspeed"]) + ","
-      datastring += str(gps_data["satellites"]) + ","
+        # telemetry
+        datastring = get_temeletry_string(gps_data)
+        mylog(datastring)
+        telemetry = bytearray.fromhex("00 00 00") + "\n\n$" + datastring + "\n\n"
+        radio_send(telemetry + packet)
+        sentence_id += 1
       
-      temps =  get_temperatures()
-      datastring += str(temps["cpu_temp"]) + ","
-      datastring += str(temps["gpu_temp"]) + ","
-      datastring += str(temps["external_temp"])
+        # ssdv pakete
+        packet = f.read(256);
       
-      datastring += "*" + str(hex(crc16f(datastring))).upper()[2:].zfill(4)
-      datastring = "$$" + datastring
-      mylog(datastring)
-      telemetry = bytearray.fromhex("00 00 00") + "\n\n$" + datastring + "\n\n"
-
-      radio_send(telemetry + packet)
-      # radio_send(telemetry)
-
-      sentence_id += 1
-      
-      # ssdv pakete
-      packet = f.read(256);
-      
-      i += 1
-    f.close() 
+        i += 1
+      f.close() 
   
-    mylog("all packets sent")
-  
-  
-    ssdv_image_seq += 1
+      mylog("all packets sent")
+      ssdv_image_seq += 1
+      
     counters["sentence_id"] = sentence_id
     counters["ssdv-image"] = ssdv_image_seq
     counters["ssdv-lastTXtime"] = ssdv_lastTXtime

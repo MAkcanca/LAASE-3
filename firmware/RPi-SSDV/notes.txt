@@ -23,11 +23,13 @@ sāk ciklu
       uzņem jaunu bildi, ja pagājis pietiekami daudz laika
 
 todo
-  Exif
+  //Exif
   saglabāt json'ā uzreiz
   ziņojumi dažādos augstumos
   //uzraksts SSDV attēliem - augstums, ..
   attēli
+    augstumā sūta lielākus attēlus,
+      pārslēdzas atpakaļ uzreiz kā sāk nolaišanos
     //pārbauda diska vietu pirms attēlu uzņemšanas
     //ssdv izvēlēties lielāko attēlu, kopš iepriekšējā attēla (interesantāks)
     //video - 10-15 sekundes
