@@ -8,12 +8,13 @@ import os
 import time
 from time import gmtime, strftime
 import subprocess
+import glob
 import demjson as json
 import crcmod
 
 
 RADIO_CALLSIGN = "RASA"
-RADIO_BAUDRATE = 300
+RADIO_BAUDRATE = 1200
 
 DS18B20_SENSOR_ID = "28-000003bb2414"
 
@@ -21,12 +22,8 @@ gps_time_set = False
 
 # ----------------------------------------------------------------------------
 
-# lcnt = 0
 def mylog(string):
-  # global lcnt
-  # print str(lcnt) + ": " + str(string)
   print "[" + strftime("%Y-%m-%d %H:%M:%S", gmtime()) + "] " + str(string)
-  # lcnt += 1
 
 mylog("starting")
 
@@ -151,13 +148,13 @@ def gps_poll(sentence_type="00*33"):
         month = string[2:4]
         year = 2000 + int(string[4:6])
         tmp_date = str(year) + '-' + month + '-' + day
-        if year == 2013 or year == 2014:
+        if year == 2014:
           gps_data["date"] = tmp_date
     
     return gps_data
     
   else:
-    mylog("no line")
+    mylog("GPS: no line")
     # no values
     return gps_data
 
@@ -220,7 +217,7 @@ def get_temperatures():
   return result
 
 
-
+# http://learn.adafruit.com/adafruits-raspberry-pi-lesson-11-ds18b20-temperature-sensing/
 def ds18b20_read_temp_raw():
   device_file = '/sys/bus/w1/devices/' + DS18B20_SENSOR_ID + '/w1_slave'
   catdata = subprocess.Popen(['cat',device_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -231,7 +228,10 @@ def ds18b20_read_temp_raw():
 
 def ds18b20_read_temp():
   lines = ds18b20_read_temp_raw()
+  ts = time.time()
   while lines[0].strip()[-3:] != 'YES':
+    if time.time() - ts > 1:
+      return 0
     time.sleep(0.2)
     lines = ds18b20_read_temp_raw()
   equals_pos = lines[1].find('t=')
@@ -240,12 +240,62 @@ def ds18b20_read_temp():
     temp_c = float(temp_string) / 1000.0
     return temp_c
 
+
+# --------------------------------
+# Exif for images
+import math
+import fractions
+
+# http://stackoverflow.com/questions/10799366/geotagging-jpegs-with-pyexiv2
+class Fraction(fractions.Fraction):
+    """Only create Fractions from floats.
+
+    >>> Fraction(0.3)
+    Fraction(3, 10)
+    >>> Fraction(1.1)
+    Fraction(11, 10)
+    """
+
+    def __new__(cls, value, ignore=None):
+        """Should be compatible with Python 2.6, though untested."""
+        return fractions.Fraction.from_float(value).limit_denominator(99999)
+
+
+def decimal_to_dms(decimal):
+    """Convert decimal degrees into degrees, minutes, seconds.
+
+    >>> decimal_to_dms(50.445891)
+    [Fraction(50, 1), Fraction(26, 1), Fraction(113019, 2500)]
+    >>> decimal_to_dms(-125.976893)
+    [Fraction(125, 1), Fraction(58, 1), Fraction(92037, 2500)]
+    """
+    remainder, degrees = math.modf(abs(decimal))
+    remainder, minutes = math.modf(remainder * 60)
+    return [Fraction(n) for n in (degrees, minutes, remainder * 60)]
+
+# --------------------------------
+
+def dump_current_position(gps_data):
+  current_position = ""
+  if gps_data["fixq"] > 2:
+    current_position += "alt: " + str(gps_data["altitude"]) + "\n"
+    current_position += "exif: "
+    current_position += " -x GPS.GPSLatitude=" + str(decimal_to_dms(gps_data["latitude"])[0]) + "/1," + str(decimal_to_dms(gps_data["latitude"])[1]) + "/1," + str(decimal_to_dms(gps_data["latitude"])[2]) + "/1"
+    current_position += " -x GPS.GPSLatitudeRef=" + ("N" if gps_data["latitude"] < 0 else "N")
+    current_position += " -x GPS.GPSLongitude=" + str(decimal_to_dms(gps_data["longitude"])[0]) + "/1," + str(decimal_to_dms(gps_data["longitude"])[1]) + "/1," + str(decimal_to_dms(gps_data["longitude"])[2]) + "/1"
+    current_position += " -x GPS.GPSLongitudeRef=" + ("W" if gps_data["longitude"] < 0 else "E")
+    current_position += " -x GPS.GPSAltitude=" + str(abs(gps_data["altitude"])) + "/1"
+    current_position += " -x GPS.GPSAltitudeRef=" + ("1" if gps_data["altitude"] < 0 else "0") + "\n"
+    
+  open("./gps-data.txt", 'w').write(current_position)
+
+
 # ----------------------------------------------------------------------------
 
 # counters = {}
 # counters["sentence_id"] = 0
-# counters["image"] = 0
-# counters["image-ssdv"] = 0
+# counters["ssdv-image"] = 0
+# counters["ssdv-lastTXtime"] = 0
 # open("./counters.json", 'w').write(json.encode(counters))
 
 
@@ -255,10 +305,9 @@ mylog("reading counters")
 
 tmp = open("./counters.json", 'r').read()
 counters = json.decode(tmp)
-# print counters
 sentence_id = counters["sentence_id"]
-image_seq = counters["image"]
-image_ssdv_seq = counters["image-ssdv"]
+ssdv_image_seq = counters["ssdv-image"]
+ssdv_lastTXtime = counters["ssdv-lastTXtime"]
 
 # mylog("setting up GPS..")
 # gps_setup()
@@ -275,6 +324,9 @@ while True:
 
     gps_setup()
     gps_data = gps_poll()
+    
+    # for images
+    dump_current_position(gps_data)    
 
     if gps_time_set == False:
       mylog("system time not set")
@@ -286,28 +338,33 @@ while True:
         gps_time_set = True
 
 
-    image_filename = strftime("%Y%m%d-%H%M%S", gmtime()) + "_" + str(image_ssdv_seq)
+    # find biggest image since the transmission of the previous one
+    # encode and start transmitting
+    
+    files = glob.glob("./ssdvpics/2014*.jpg")
+    files = sorted(files, key=os.path.getmtime)
 
-    mylog("taking SSDV picture #" + str(image_ssdv_seq) + "..")
-    # 400x256
-    # 512x288
-    # 272x208
-    # 256x176
-    os.system("/usr/bin/raspistill -n -w 272 -h 176 -t 1000 -e jpg -q 90 -ex auto -mm matrix -o ./ssdvpics/" + image_filename + ".jpg")
-    mylog("  ..done")
+    bigfile_filename = ""
+    bigfile_filesize = 0
+    for item in files:
+      filemtime = os.stat(item)[8]
+
+      if filemtime > ssdv_lastTXtime:
+        if os.stat(item)[6] > bigfile_filesize:
+          bigfile_filesize = os.stat(item)[6]
+          bigfile_filename = item
+
+    mylog("next SSDV pic: " + bigfile_filename)
+
+    if bigfile_filename:
+      image_filename = os.path.basename(bigfile_filename)
     
-    if gps_data["fixq"] == 3 and gps_data["altitude"] > 0:
-      mylog("annotating")
-      cmd = "/usr/bin/convert ./ssdvpics/" + image_filename + ".jpg"
-      cmd += " -fill white -undercolor '#00000040' -gravity SouthWest"
-      cmd += " -annotate +0+0 ' Altitude: " + str(gps_data['altitude']) + "m '"
-      # cmd += " -font Tahoma -pointsize 6 -density 50"
-      cmd += " ./ssdvpics/" + image_filename + "-osd.jpg"
+      cmd = "/home/pi/sw/ssdv/ssdv -e -c " + RADIO_CALLSIGN + " -i " + str(ssdv_image_seq) + " ./ssdvpics/" + image_filename + " ./current.ssdv > /dev/null 2>&1"
       os.system(cmd)
-      image_filename += "-osd"
+      mylog(cmd)
+      mylog("encoded SSDV picture")
     
-    os.system("/home/pi/sw/ssdv/ssdv -e -c " + RADIO_CALLSIGN + " -i " + str(image_ssdv_seq) + " ./ssdvpics/" + image_filename + ".jpg ./current.ssdv > /dev/null 2>&1")
-    mylog("encoded SSDV picture")
+      ssdv_lastTXtime = time.time()
   
 
     f = open("./current.ssdv", "rb"); 
@@ -315,16 +372,14 @@ while True:
     i = 0
     while packet != "":
 
-      mylog("polling GPS..")
+      # mylog("polling GPS..")
       gps_data = gps_poll()
-      mylog("  ..done")
+      # mylog("  ..done")
       # mylog(gps_data)
+      
+      # for images
+      dump_current_position(gps_data)    
 
-      if i % 5 == 0:
-        mylog("taking picture #" + str(image_seq) + "..")
-        # os.system("/usr/bin/raspistill -n -w 2592 -h 1944 -t 1000 -e jpg -q 90 -ex auto -mm matrix -o ./pics/" + strftime("%Y%m%d-%H%M%S", gmtime()) + "_" + str(image_seq) + ".jpg &")
-        mylog("  ..done")
-        image_seq += 1
       
       # telemetrija
       datastring = RADIO_CALLSIGN + ","
@@ -342,7 +397,7 @@ while True:
       datastring += str(temps["gpu_temp"]) + ","
       datastring += str(temps["external_temp"])
       
-      datastring += "*" + str(hex(crc16f(datastring))).upper()[2:]
+      datastring += "*" + str(hex(crc16f(datastring))).upper()[2:].zfill(4)
       datastring = "$$" + datastring
       mylog(datastring)
       telemetry = bytearray.fromhex("00 00 00") + "\n\n$" + datastring + "\n\n"
@@ -361,11 +416,10 @@ while True:
     mylog("all packets sent")
   
   
-    image_ssdv_seq += 1
+    ssdv_image_seq += 1
     counters["sentence_id"] = sentence_id
-    counters["image-ssdv"] = image_ssdv_seq
-    counters["image"] = image_seq
-  
+    counters["ssdv-image"] = ssdv_image_seq
+    counters["ssdv-lastTXtime"] = ssdv_lastTXtime
     open("./counters.json", 'w').write(json.encode(counters))
   
     mylog("next cycle")

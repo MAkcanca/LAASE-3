@@ -23,12 +23,12 @@ sāk ciklu
       uzņem jaunu bildi, ja pagājis pietiekami daudz laika
 
 todo
-  EXIF
+  Exif
   saglabāt json'ā uzreiz
   ziņojumi dažādos augstumos
   //uzraksts SSDV attēliem - augstums, ..
   attēli
-    pārbauda diska vietu pirms attēlu uzņemšanas
-    ssdv izvēlēties lielāko attēlu, kopš iepriekšējā attēla (interesantāks)
-    video - 10-15 sekundes
-  temperatūra - ārējā, GPU
+    //pārbauda diska vietu pirms attēlu uzņemšanas
+    //ssdv izvēlēties lielāko attēlu, kopš iepriekšējā attēla (interesantāks)
+    //video - 10-15 sekundes
+  //temperatūra - ārējā, GPU
