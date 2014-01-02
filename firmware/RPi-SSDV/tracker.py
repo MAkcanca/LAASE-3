@@ -14,7 +14,7 @@ import crcmod
 
 
 RADIO_CALLSIGN = "RASA"
-RADIO_BAUDRATE = 1200
+RADIO_BAUDRATE = 300
 
 DS18B20_SENSOR_ID = "28-000003bb2414"
 
@@ -85,19 +85,19 @@ def gps_poll(sentence_type="00*33"):
   }
   
   GPS = serial.Serial("/dev/ttyAMA0", 9600, timeout=1)
-  time.sleep(0.2)
+  time.sleep(0.05)
   GPS.flush()
-  time.sleep(0.2)
+  time.sleep(0.05)
   
   GPS.write("$PUBX," + sentence_type + "\r\n")
-  time.sleep(0.2)
+  time.sleep(0.05)
   GPS.flush()
-  time.sleep(0.2)
+  time.sleep(0.05)
   GPS.close()
     
   GPS = serial.Serial("/dev/ttyAMA0", 9600, timeout=1)
   GPS.flush()
-  time.sleep(0.2)
+  time.sleep(0.05)
   
   line = GPS.readline().strip()
   if line:
@@ -106,6 +106,7 @@ def gps_poll(sentence_type="00*33"):
     # return line
     
     if line != "" and line.startswith("$PUBX"): # while we don't have a sentence
+      mylog(line)
       line = line.split(",") # split sentence into individual fields
       
       # $PUBX,04,152045.00,301213,141645.00,1773,141645.00,-151518,-3226.618,21*00
@@ -172,7 +173,7 @@ def gps_DegreeConvert(degrees):
 def gps_sendUBX(MSG, length):
   GPS = serial.Serial("/dev/ttyAMA0", 9600, timeout=1)
   GPS.flush()
-  time.sleep(0.2)
+  time.sleep(0.05)
   
   # mylog("Sending UBX Command: ")
   ubxcmds = ""
@@ -184,7 +185,7 @@ def gps_sendUBX(MSG, length):
   # mylog("UBX Command Sent...")
   
   GPS.flush()
-  time.sleep(0.2)
+  time.sleep(0.05)
   GPS.close()
 
 

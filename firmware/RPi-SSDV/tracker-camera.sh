@@ -1,18 +1,14 @@
 #!/bin/bash
 cd /home/pi/sw/tracker;
 
-# i=1
-# while true; do
+cnt_ssdv=0
+cnt_video=0
+
 for ((i=0; ;i++)); do
 
   # if at least 200 MB free disk space
   # if (( $(df /dev/root | awk 'NR==2{print $4}') > 204800 )); then
   if [ `df | grep /dev/root | awk '{print $4}'` -gt 204800 ]; then
-
-    # echo `date +%Y%m%d-%H%M%S`
-    
-    # gps_latitude = grep lat ./gps-data.txt | awk '{print $2}'
-    # gps_longitude = `grep lon ./gps-data.txt | awk '{print $2}'`
     
     echo "taking picture #${i}"
     gps_altitude=`grep alt ./gps-data.txt | awk '{print $2}'`
@@ -23,10 +19,12 @@ for ((i=0; ;i++)); do
     # /usr/bin/raspistill -n -w 128 -h 128 -t 1000 -e jpg -q 90 -ex auto -mm matrix -o ./pics/${filename}.jpg ${gps_exiftags:6:999}
 
     if ! ((i % 3)); then
-      echo "taking SSDV picture #${i}"
+      echo "taking SSDV picture #${cnt_ssdv}"
+      sleep 1
       gps_altitude=`grep alt ./gps-data.txt | awk '{print $2}'`
       gps_exiftags=`grep exif ./gps-data.txt`
-      filename=`date +%Y%m%d-%H%M%S`_${gps_altitude}_${i}
+      filename=`date +%Y%m%d-%H%M%S`_${gps_altitude}_${cnt_ssdv}
+      
       # 400x256
       # 512x288
       # 272x208
@@ -36,19 +34,19 @@ for ((i=0; ;i++)); do
         echo "annotating SSDV image"
         # backup
         cp ./ssdvpics/${filename}.jpg ./ssdvpics/${filename}.jpg.orig
-        # echo "cp done"
         /usr/bin/convert ./ssdvpics/${filename}.jpg -fill white -undercolor '#00000040' -gravity SouthWest -annotate +0+0 " Altitude: ${gps_altitude}m " ./ssdvpics/${filename}.jpg
-        # echo "convert done"
       fi
+      cnt_ssdv++
     fi
   
-  
     if ! ((i % 10)); then
-      echo "taking video #${i}"
-      gps_altitude=`grep alt ./gps-data.txt | awk '{print $2}'`
+      echo "taking video #${cnt_video}"
       sleep 1
+      gps_altitude=`grep alt ./gps-data.txt | awk '{print $2}'`
+      filename=`date +%Y%m%d-%H%M%S`_${gps_altitude}_${cnt_ssdv}
       # 640x360
-      /usr/bin/raspivid -n -w 854 -h 480 -t 20000 -ex auto -mm matrix -fps 25 -b 2000000 -o ./video/`date +%Y%m%d-%H%M%S`_${gps_altitude}_${i}.h264
+      /usr/bin/raspivid -n -w 854 -h 480 -t 20000 -ex auto -mm matrix -fps 25 -b 2000000 -o ./video/${filename}.h264
+      cnt_ssdv++
     fi
 
   fi
