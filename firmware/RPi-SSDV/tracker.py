@@ -45,23 +45,13 @@ def radio_send(data):
 def gps_setup():
   mylog("Setting up GPS..")
   
-  # GPS = serial.Serial("/dev/ttyAMA0", 9600, timeout=1)
-  # GPS.flush()
-  # time.sleep(0.2)
-  
   setNMEAoff = bytearray.fromhex("B5 62 06 00 14 00 01 00 00 00 D0 08 00 00 80 25 00 00 07 00 01 00 00 00 00 00 A0 A9")
   gps_sendUBX(setNMEAoff, len(setNMEAoff))
-  # GPS.flush()
-  # time.sleep(0.2)
   
   setNavmode = bytearray.fromhex("B5 62 06 24 24 00 FF FF 06 03 00 00 00 00 10 27 00 00 05 00 FA 00 FA 00 64 00 2C 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 16 DC")
   gps_sendUBX(setNavmode, len(setNavmode))
-  # GPS.flush()
-  # time.sleep(0.2)
   
-  # GPS.flush()
-  
-  # iztiira visu, kas iekraajies
+  # read all responses
   GPS = serial.Serial("/dev/ttyAMA0", 9600, timeout=1)
   n = GPS.inWaiting()
   if n:
@@ -102,15 +92,13 @@ def gps_poll(sentence_type="00*33"):
   line = GPS.readline().strip()
   if line:
     # mylog(line)
-    # do something and return the parsed data
-    # return line
-    
+    # do something and return the parsed data    
     if line != "" and line.startswith("$PUBX"): # while we don't have a sentence
-      mylog(line)
+      # mylog(line)
       line = line.split(",") # split sentence into individual fields
       
       # $PUBX,04,152045.00,301213,141645.00,1773,141645.00,-151518,-3226.618,21*00
-      # $PUBX,00,152047.00,5708.89443,N,02450.21266,E,75.687,G3,27,30,3.420,17.85,0.130,,2.07,3.22,2.68,5,0,0*61
+      # $PUBX,00,152047.00,5710.49843,N,02438.66212,E,57.687,G3,27,30,3.420,17.85,0.130,,2.07,3.22,2.68,5,0,0*61
       
       if line[1] == "00" or line[1] == "04":        
         tmp_time = line[2]
@@ -191,17 +179,17 @@ def gps_sendUBX(MSG, length):
 
 def get_temperatures():
   result = {
-    "cpu_temp": 0,
+    # "cpu_temp": 0,
     "gpu_temp": 0,
     "external_temp": 0,
   }
   
   try:
-    p = subprocess.Popen('cat /sys/class/thermal/thermal_zone0/temp', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    for line in p.stdout.readlines():
-      cpu_temp = round(float(float(line)/10 % float(line)/100), 1)
-      result["cpu_temp"] = cpu_temp
-    retval = p.wait()
+    # p = subprocess.Popen('cat /sys/class/thermal/thermal_zone0/temp', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # for line in p.stdout.readlines():
+    #   cpu_temp = round(float(float(line)/10 % float(line)/100), 1)
+    #   result["cpu_temp"] = cpu_temp
+    # retval = p.wait()
     
     p = subprocess.Popen('/opt/vc/bin/vcgencmd measure_temp', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     for line in p.stdout.readlines():
@@ -211,7 +199,7 @@ def get_temperatures():
       result["gpu_temp"] = gpu_temp
     retval = p.wait()
     
-    result["external_temp"] = ds18b20_read_temp()
+    result["external_temp"] = round(ds18b20_read_temp(), 1)
   except:
     print "fail"
   
@@ -233,7 +221,7 @@ def ds18b20_read_temp():
   while lines[0].strip()[-3:] != 'YES':
     if time.time() - ts > 1:
       return 0
-    time.sleep(0.2)
+    time.sleep(0.1)
     lines = ds18b20_read_temp_raw()
   equals_pos = lines[1].find('t=')
   if equals_pos != -1:
@@ -287,7 +275,7 @@ def dump_current_position(gps_data):
     current_position += " -x GPS.GPSLongitudeRef=" + ("W" if gps_data["longitude"] < 0 else "E")
     current_position += " -x GPS.GPSAltitude=" + str(abs(gps_data["altitude"])) + "/1"
     current_position += " -x GPS.GPSAltitudeRef=" + ("1" if gps_data["altitude"] < 0 else "0") + "\n"
-    
+  # yes, empty, if GPS has no 3D fix
   open("./gps-data.txt", 'w').write(current_position)
 
 
@@ -305,7 +293,7 @@ def get_temeletry_string(gps_data):
   datastring += str(gps_data["satellites"]) + ","
 
   temps =  get_temperatures()
-  datastring += str(temps["cpu_temp"]) + ","
+  # datastring += str(temps["cpu_temp"]) + ","
   datastring += str(temps["gpu_temp"]) + ","
   datastring += str(temps["external_temp"])
 
@@ -315,12 +303,6 @@ def get_temeletry_string(gps_data):
 
 
 # ----------------------------------------------------------------------------
-
-# counters = {}
-# counters["sentence_id"] = 0
-# counters["ssdv-image"] = 0
-# counters["ssdv-lastTXtime"] = 0
-# open("./counters.json", 'w').write(json.encode(counters))
 
 
 radio_send("\n\n--= space.people.lv =--\n\n")
@@ -333,20 +315,22 @@ sentence_id = counters["sentence_id"]
 ssdv_image_seq = counters["ssdv-image"]
 ssdv_lastTXtime = counters["ssdv-lastTXtime"]
 
-# mylog("setting up GPS..")
-# gps_setup()
-# mylog("  ..done")
 
 # DS18B20 sensor
-os.system('modprobe w1-gpio')
-os.system('modprobe w1-therm')
+# os.system('modprobe w1-gpio')
+# os.system('modprobe w1-therm')
+
+gps_setup_ts = 0
 
 
 while True:
-# if True:
   try:
 
-    gps_setup()
+    # set up GPS every minute, not needed for every loop
+    if gps_setup_ts + 60 < time.time():
+      gps_setup()
+      gps_setup_ts = time.time()
+      
     gps_data = gps_poll()
     
     # for images
@@ -401,7 +385,6 @@ while True:
 
       f = open("./current.ssdv", "rb"); 
       packet = f.read(256); 
-      i = 0
       while packet != "":
 
         gps_data = gps_poll()
@@ -416,10 +399,9 @@ while True:
         radio_send(telemetry + packet)
         sentence_id += 1
       
-        # ssdv pakete
+        # next SSDV packet
         packet = f.read(256);
       
-        i += 1
       f.close() 
   
       mylog("all packets sent")

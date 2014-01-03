@@ -6,3 +6,7 @@ Python modules
   crcmod
 
 SSDV - https://github.com/fsphil/ssdv
+
+DS18B20 - 1-Wire sensor
+  /etc/modules
+  https://github.com/raspberrypi/linux/issues/435
